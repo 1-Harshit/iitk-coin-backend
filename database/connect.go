@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"os"
 
 	_ "github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
@@ -20,7 +21,10 @@ func Connect() (err error) {
 		dbname   = viper.GetString("DATABASE.NAME")
 	)
 
-	psqlconn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", host, port, user, password, dbname)
+	psqlconn := os.Getenv("DATABASE_URL")
+	if psqlconn == "" {
+		psqlconn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s", host, port, user, password, dbname)
+	}
     
 	db, err := sql.Open("postgres", psqlconn)
 	if err != nil {
