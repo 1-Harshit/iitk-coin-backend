@@ -17,7 +17,7 @@ func (s *smtpServer) Address() string {
 }
 
 func SendOTP(toRollno string, otp string) (err error) {
-
+	log.Info("Sending OTP ", otp, " to ", toRollno)
 	from := viper.GetString("MAIL.FROM")
 	password := viper.GetString("MAIL.PASSWORD")
 	to := []string{

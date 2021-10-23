@@ -1,7 +1,6 @@
 package logger
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/sirupsen/logrus"
@@ -13,11 +12,5 @@ func init() {
 
 	logrus.SetLevel(logrus.Level(viper.GetInt("LOGGER.LOG_LEVEL")))
 
-	f, err := os.OpenFile("iitkcoin.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
-	if err != nil {
-		fmt.Printf("error opening file: %v", err)
-	}
-
-	logrus.SetOutput(f)
-
+	logrus.SetOutput(os.Stdout)
 }
