@@ -1,6 +1,7 @@
 package account
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -9,92 +10,141 @@ import (
 	"github.com/spf13/viper"
 )
 
-func TransferCoins(fromRollno string, toRollno string, numCoins int, remarks string) error {
+func TransferCoins(fromRollno string, toRollno string, numCoins int, remarks string) (string, error) {
 
 	err := validateCoinValue(numCoins)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	userExistsFrom, err := UserExists(fromRollno)
 
 	if err != nil {
-		return errors.NewHTTPError(err, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		return "", errors.NewHTTPError(err, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 
 	userExistsTo, err := UserExists(toRollno)
 
 	if err != nil {
-		return errors.NewHTTPError(err, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		return "", errors.NewHTTPError(err, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 
 	if !userExistsFrom || !userExistsTo {
-		return errors.NewHTTPError(nil, http.StatusBadRequest, "user account does not exist")
+		return "", errors.NewHTTPError(nil, http.StatusBadRequest, "user account does not exist")
 	}
 
 	tx, err := database.DB.Begin()
 	if err != nil {
 		tx.Rollback()
-		return err
+		return "", err
 	}
 
 	res, err := tx.Exec("UPDATE ACCOUNT SET coins = coins - $1 WHERE rollno = $2 AND coins - $1 >= 0 AND coins", numCoins, fromRollno)
 	if err != nil {
 		tx.Rollback()
-		return err
+		return "", err
 	}
 
 	rowCnt, err := res.RowsAffected()
 	if err != nil {
 		tx.Rollback()
-		return err
+		return "", err
 	}
 
 	if rowCnt == 0 {
 		tx.Rollback()
-		return errors.NewHTTPError(nil, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		return "", errors.NewHTTPError(nil, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 
 	limit := viper.GetInt("WALLET.UPPER_COIN_LIMIT")
-	numCoinsToAdd := numCoins - calculateTax(fromRollno, toRollno, numCoins)
+	tax, err := CalculateTransferTax(fromRollno, toRollno, numCoins)
+	if err != nil {
+		tx.Rollback()
+		return "", err
+	}
+
+	numCoinsToAdd := numCoins - tax
 
 	res, err = tx.Exec("UPDATE ACCOUNT SET coins = coins + $1 WHERE rollno=$2 AND coins + $1 <= $3", numCoinsToAdd, toRollno, limit)
 	if err != nil {
 		tx.Rollback()
-		return err
+		return "", err
 	}
 
 	rowCnt, err = res.RowsAffected()
 	if err != nil {
 		tx.Rollback()
-		return err
+		return "", err
 	}
 
 	if rowCnt == 0 {
 		tx.Rollback()
-		return errors.NewHTTPError(nil, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		return "", errors.NewHTTPError(nil, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 
-	_, err = tx.Exec("INSERT INTO TRANSFER_HISTORY (fromRollno, toRollno, time, coins, tax, remarks) VALUES ($1, $2, $3, $4, $5, $6)", fromRollno, toRollno, time.Now().Unix(), numCoins, numCoins - numCoinsToAdd, remarks)
+	stmt, err := tx.Prepare("INSERT INTO TRANSFER_HISTORY (fromRollno, toRollno, time, coins, tax, remarks) VALUES ($1, $2, $3, $4, $5, $6)  RETURNING id")
+
 
 	if err != nil {
 		tx.Rollback()
-		return err
+		return "", errors.NewHTTPError(err, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+	}
+
+	var (
+		transferSuffix = viper.GetString("TXNID.TRANSFER_SUFFIX")
+		txnIDPadding = viper.GetInt("TXNID.PADDING")
+		id int
+	)
+
+	err = stmt.QueryRow(fromRollno, toRollno, time.Now().Unix(), numCoins, numCoins - numCoinsToAdd, remarks).Scan(&id);
+	
+	if err != nil {
+		tx.Rollback()
+		return "", errors.NewHTTPError(err, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+	}
+	if err != nil {
+		tx.Rollback()
+		return "", err
 	}
 
 	err = tx.Commit()
 	if err != nil {
 		tx.Rollback()
-		return err
+		return "", err
 	}
 
-	return nil
+	return fmt.Sprintf("%s%0*d", transferSuffix, txnIDPadding, id), nil
 }
 
-func calculateTax(rollno1 string, rollno2 string, numCoins int) (tax int) {
-	if rollno1[:2] == rollno2[:2] {
-		return (numCoins * viper.GetInt("TAX.INTER_BATCH") / 100)
-	} else {
-		return (numCoins * viper.GetInt("TAX.INTRA_BATCH") / 100)
+func CalculateTransferTax(fromRollno string, toRollno string, numCoins int) (int, error) {
+
+	err := validateCoinValue(numCoins)
+	if err != nil {
+		return 0, err
 	}
+
+	userExistsFrom, err := UserExists(fromRollno)
+
+	if err != nil {
+		return 0, errors.NewHTTPError(err, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+	}
+
+	userExistsTo, err := UserExists(toRollno)
+
+	if err != nil {
+		return 0, errors.NewHTTPError(err, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+	}
+
+	if !userExistsFrom || !userExistsTo {
+		return 0, errors.NewHTTPError(nil, http.StatusBadRequest, "user account does not exist")
+	}
+
+	var tax int
+	if fromRollno[:2] == toRollno[:2] {
+		tax = (numCoins * viper.GetInt("TAX.INTER_BATCH") / 100)
+	} else {
+		tax = (numCoins * viper.GetInt("TAX.INTRA_BATCH") / 100)
+	}
+
+	return tax, nil
 }

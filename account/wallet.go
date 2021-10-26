@@ -2,9 +2,10 @@ package account
 
 import (
 	"database/sql"
-	"time"
+	"fmt"
 
 	"github.com/bhuvansingla/iitk-coin/database"
+	"github.com/spf13/viper"
 )
 
 type TransactionType string
@@ -111,10 +112,17 @@ func GetWalletHistoryByRollNo(rollno string) ([]interface{}, error) {
 
 	var history []interface{}
 
+	var (
+		redeemSuffix = viper.GetString("TXNID.REDEEM_SUFFIX")
+		rewardSuffix = viper.GetString("TXNID.REWARD_SUFFIX")
+		transferSuffix = viper.GetString("TXNID.TRANSFER_SUFFIX")
+		txnIDPadding = viper.GetInt("TXNID.PADDING")
+	)
+	
 	for rows.Next() {
 		var (
-			id 			string
-			time 		time.Time
+			id 			int
+			time 		int64
 			txType 		TransactionType
 			fromRollno 	sql.NullString
 			toRollno	sql.NullString
@@ -136,16 +144,16 @@ func GetWalletHistoryByRollNo(rollno string) ([]interface{}, error) {
 		case REWARD:
 			historyItem = RewardHistory{
 				Type: txType,
-				Time: time.Unix(),
-				Id: "RWD" + id,
+				Time: time,
+				Id: fmt.Sprintf("%s%0*d", rewardSuffix, txnIDPadding, id),
 				Amount: coins.Int64,
 				Remarks: remarks.String,
 			}
 		case REDEEM:
 			historyItem = RedeemHistory{
 				Type: txType,
-				Time: time.Unix(),
-				Id: "REDM" + id,
+				Time: time,
+				Id: fmt.Sprintf("%s%0*d", redeemSuffix, txnIDPadding, id),
 				Amount: coins.Int64,
 				Remarks: remarks.String,
 				Status: RedeemStatus(status.String),
@@ -153,8 +161,8 @@ func GetWalletHistoryByRollNo(rollno string) ([]interface{}, error) {
 		case TRANSFER:
 			historyItem = TransferHistory{
 				Type: txType,
-				Time: time.Unix(),
-				Id: "TRNS" + id,
+				Time: time,
+				Id: fmt.Sprintf("%s%0*d", transferSuffix, txnIDPadding, id),
 				Amount: coins.Int64,
 				Tax: tax.Int64,
 				FromRollNo: fromRollno.String,
