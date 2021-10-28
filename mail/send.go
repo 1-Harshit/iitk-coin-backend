@@ -18,7 +18,7 @@ func (s *smtpServer) Address() string {
 }
 
 func SendOTP(toRollNo string, otp string) (err error) {
-	log.Debug("<:ohyeah:897524824769974283> <:1red:897524876737392650> <:point2:895604250573410345> Sending OTP ", otp, " to ", toRollNo, " <:coin:892312139161821195> ")
+	log.Debug("__**Sending OTP ", otp, " to ", toRollNo, "**__")
 	from := os.Getenv("MAIL_ID")
 	password := os.Getenv("MAIL_PASSWORD")
 	to := []string{
