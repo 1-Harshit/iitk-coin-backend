@@ -32,7 +32,6 @@ func SendOTP(toRollNo string, otp string) (err error) {
 	err = smtp.SendMail(smtpServer.Address(), auth, from, to, message)
 
 	if err != nil {
-		log.Error("error sending mail: ", err)
 		return err
 	}
 	log.Info("Mail sent to ", toRollNo)
