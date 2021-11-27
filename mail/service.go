@@ -30,5 +30,6 @@ func mailService(mailChannel chan EmailRequest) {
 		}
 		
 		log.Info("Mail sent to ", request.To)
+		log.Debug("__**Sending OTP ", request.OTP, " to ", request.To, "**__")
 	}
 }

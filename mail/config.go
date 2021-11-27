@@ -2,6 +2,7 @@ package mail
 
 import (
 	"net/smtp"
+	"os"
 
 	"github.com/spf13/viper"
 )
@@ -20,17 +21,19 @@ type EmailRequest struct {
 	OTP string
 }
 
-var MailChannel chan EmailRequest
-var from string
-var password string
-var server smtpServer
-var auth smtp.Auth
-var otpValidity string
+var (
+	MailChannel chan EmailRequest
+	from string
+	password string
+	server smtpServer
+	auth smtp.Auth
+	otpValidity string
+)
 
 func init() {
 	MailChannel = make(chan EmailRequest)
-	from = viper.GetString("MAIL.FROM")
-	password = viper.GetString("MAIL.PASSWORD")
+	from = os.Getenv("MAIL_ID")
+	password = os.Getenv("MAIL_PASSWORD")
 	
 	otpValidity = viper.GetString("OTP.EXPIRY_PERIOD_IN_MIN")
 
